@@ -1,25 +1,24 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include<stdio.h>
 #include"conio2.h"
+#include<math.h>
 
-/* Comment: in the final program declare appropriate constants, e.g.,
-   to eliminate from your program numerical values by replacing them
-   with well defined identifiers */
-#define BOARD_SIZE 13
+#define BOARD_SIZE 19
 #define BOARD_BEGGINING_X 50
 #define BOARD_BEGGINING_Y 1
-#define BOARD_GAP_SIZE_X 4
-#define BOARD_GAP_SIZE_Y 2
-#define BOARD_SIZE_LIMIT 10
+#define BOARD_GAP_SIZE_X 2
+#define BOARD_GAP_SIZE_Y 1
+#define BOARD_SIZE_LIMIT 20
 
 #define TEXT_COLOR BLUE
 #define BACKGROUND_COLOR DARKGRAY
+#define BORDER_COLOR YELLOW
 
 #define ARROW_DOWN 0x48
 #define ARROW_UP 0x50
 #define ARROW_LEFT 0x4b
 #define ARROW_RIGHT 0x4d
-#define CURSOR 'O'
+#define CURSOR 'X'
 
 typedef struct coordinates {
 	int x;
@@ -36,7 +35,20 @@ typedef struct game {
 	board_t *board;
 } game_t;
 
-void draw_info(coordinates_t start_coordinates) {
+char* int_to_char(int number) {
+	int number_length = (int)lround(floor(log10(number))) + 1;
+	char *converted_number = new char[number_length + 1];
+	for (int i = 1; i <= number_length; i++) {
+		int modulo = number % (10 * i);
+		converted_number[number_length - i] = (char)('0' + (char)modulo);
+		number -= modulo;
+		number /= 10;
+	}
+	converted_number[number_length] = '\0';
+	return converted_number;
+}
+
+void draw_info(coordinates_t start_coordinates, coordinates_t *cursor_board_position) {
 	textcolor(TEXT_COLOR);
 	gotoxy(start_coordinates.x, start_coordinates.y++);
 	cputs("Jerzy, Szyjut, 193064");
@@ -58,6 +70,16 @@ void draw_info(coordinates_t start_coordinates) {
 	cputs("l       = load the game state");
 	gotoxy(start_coordinates.x, start_coordinates.y++);
 	cputs("f       = finish the game");
+	gotoxy(start_coordinates.x, start_coordinates.y+=2);
+	cputs("Current coordinates: (");
+	char* converted_position_x = int_to_char(cursor_board_position->x);
+	char* converted_position_y = int_to_char(cursor_board_position->y);
+	cputs(converted_position_x);
+	putch(',');
+	cputs(converted_position_y);
+	putch(')');
+	delete converted_position_x;
+	delete converted_position_y;
 }
 
 void clear_screen() {
@@ -65,23 +87,23 @@ void clear_screen() {
 	clrscr();
 }
 
-coordinates_t* get_cursor_position_from_board_position(coordinates_t cursor_board_position) {
+coordinates_t *get_cursor_position_from_board_position(coordinates_t cursor_board_position) {
 	coordinates_t* cursor_screen_position = new coordinates_t;
-	cursor_screen_position->x = BOARD_GAP_SIZE_X * cursor_board_position.x + BOARD_BEGGINING_X;
-	cursor_screen_position->y = BOARD_GAP_SIZE_Y * cursor_board_position.y + BOARD_BEGGINING_Y;
+	cursor_screen_position->x = BOARD_GAP_SIZE_X * (cursor_board_position.x + 1) + BOARD_BEGGINING_X;
+	cursor_screen_position->y = BOARD_GAP_SIZE_Y * (cursor_board_position.y + 1) + BOARD_BEGGINING_Y;
 	return cursor_screen_position;
 }
 
 void draw_cursor(coordinates_t board_cursor_position, int color) {
-	coordinates_t *cursor_posiiton = get_cursor_position_from_board_position(board_cursor_position);
-	gotoxy(cursor_posiiton->x, cursor_posiiton->y);
+	coordinates_t *cursor_position = get_cursor_position_from_board_position(board_cursor_position);
+	gotoxy(cursor_position->x, cursor_position->y);
 	textcolor(color);
 	textbackground(BACKGROUND_COLOR);
 	putch(CURSOR);
-	delete cursor_posiiton;
+	delete cursor_position;
 }
 
-void handle_movement(coordinates_t* cursor_board_position) {
+void handle_movement(coordinates_t *cursor_board_position, int board_size) {
 	int zn;
 	zn = getch();
 	if (zn == ARROW_DOWN)
@@ -92,7 +114,7 @@ void handle_movement(coordinates_t* cursor_board_position) {
 	}
 	else if (zn == ARROW_UP)
 	{
-		if (cursor_board_position->y < BOARD_SIZE) {
+		if (cursor_board_position->y < board_size - 1) {
 			cursor_board_position->y++;
 		}
 	}
@@ -103,10 +125,54 @@ void handle_movement(coordinates_t* cursor_board_position) {
 		}
 	}
 	else if (zn == ARROW_RIGHT) {
-		if (cursor_board_position->x < BOARD_SIZE) {
+		if (cursor_board_position->x < board_size - 1) {
 			cursor_board_position->x++;
 		}
 	};
+}
+
+void draw_board(board_t *board, coordinates_t start) {
+	int displayed_size = board->size;
+	coordinates_t board_limits;
+	board_limits.x = (displayed_size+ 1)*BOARD_GAP_SIZE_X + start.x;
+	board_limits.y = (displayed_size+ 1)*BOARD_GAP_SIZE_Y + start.y;
+	coordinates_t board_coordinates;
+	for (int y = start.y; y <= board_limits.y; y++) {
+		for (int x = start.x; x <= board_limits.x; x++) {
+			gotoxy(x, y);
+			board_coordinates = { ((x - start.x - 1) / BOARD_GAP_SIZE_X), ((y - start.y - 1) / BOARD_GAP_SIZE_Y) };
+			if (x == start.x || x == board_limits.x || y == start.y || y == board_limits.y ) {
+				textcolor(BORDER_COLOR);
+				putch('*');
+			}
+			else {
+				if (((x - start.x) % BOARD_GAP_SIZE_X == 0) && ((y - start.y) % BOARD_GAP_SIZE_Y == 0)) {
+					switch (board->fields[board_coordinates.x][board_coordinates.y])
+					{
+					case -1:
+						textcolor(BLACK);
+						putch('O');
+						break;
+					case 1:
+						textcolor(WHITE);
+						putch('O');
+						break;
+					default:
+						textcolor(TEXT_COLOR);
+						putch('+');
+						break;
+					}
+					textcolor(TEXT_COLOR);
+				}
+				else if ((BOARD_GAP_SIZE_X > 1 && BOARD_GAP_SIZE_Y > 1) && (x - start.x) % BOARD_GAP_SIZE_X == 0) {
+					putch('|');
+				}
+				else if ((BOARD_GAP_SIZE_X > 1 && BOARD_GAP_SIZE_Y > 1) && (y - start.y) % BOARD_GAP_SIZE_Y == 0) {
+					putch('-');
+				}
+			}
+		}
+	}
 }
 
 board_t *initialize_board(int size) {
@@ -129,7 +195,7 @@ board_t *initialize_board(int size) {
 	return board;
 }
 
-game_t* initialize_game() {
+game_t *initialize_game() {
 	game_t *game = new game_t;
 	game->cursor_position = new coordinates_t;
 	game->cursor_position->x = 0;
@@ -138,30 +204,46 @@ game_t* initialize_game() {
 	return game;
 }
 
+void free_game_memory(game_t* game) {
+	for (int i = 0; i < game->board->size; i++) {
+		delete game->board->fields[i];
+	}
+	delete game->board->fields;
+	delete game->board;
+	delete game->cursor_position;
+}
+
 int main() {
 	int zn = 0;
 	coordinates_t cursor_board_position = { 0, 0 };
 	coordinates_t info_start_coordinates = { 1, 1 };
+	game_t *game = initialize_game();
 
 #ifndef __cplusplus
 	Conio2_Init();
 #endif
 
-	settitle("Jerzy, Szyjut, 193064");
+	settitle("Jerzy, Szyjut, 193064"); 
 	_setcursortype(_NOCURSOR);
 	do {
 		clear_screen();
 		
-		draw_info(info_start_coordinates);
+		draw_info(info_start_coordinates, game->cursor_position);
 
-		draw_cursor(cursor_board_position, WHITE);
+		draw_board(game->board, { BOARD_BEGGINING_X, BOARD_BEGGINING_Y });
+
+		draw_cursor(*(game->cursor_position), WHITE);
 		
-		zn = getch();
-		if (zn == 0) {
-			handle_movement(&cursor_board_position);
+		switch (zn = getch())
+		{
+			case 0:
+				handle_movement(game->cursor_position, game->board->size);
+			default:
+				break;
 		}
 	} while (zn != 'q');
 
 	_setcursortype(_NORMALCURSOR);
+	free_game_memory(game);
 	return 0;
 }
