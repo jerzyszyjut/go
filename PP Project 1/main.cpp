@@ -31,8 +31,8 @@ typedef struct coordinates {
 } coordinates_t;
 
 typedef struct score {
-	int white_player;
-	int black_player;
+	float white_player;
+	float black_player;
 } score_t;
 
 typedef struct board {
@@ -41,9 +41,10 @@ typedef struct board {
 } board_t;
 
 typedef struct game {
-	coordinates_t *cursor_position;
-	board_t *board;
-	score_t score;
+	coordinates_t* cursor_position;
+	board_t* board;
+	board_t* previous_board;
+	score_t* score;
 	char current_player;
 } game_t;
 
@@ -61,10 +62,7 @@ char* int_to_char(int number) {
 }
 
 void draw_info(coordinates_t *start_coordinates, game_t *game) {
-	char* converted_position_x = int_to_char(game->cursor_position->x);
-	char* converted_position_y = int_to_char(game->cursor_position->y);
-	char* converted_white_score = int_to_char(game->score.white_player);
-	char* converted_black_score = int_to_char(game->score.black_player);
+	char buffer[32];
 	textcolor(TEXT_COLOR);
 	gotoxy(start_coordinates->x, start_coordinates->y++);
 	cputs("Jerzy, Szyjut, 193064");
@@ -88,21 +86,11 @@ void draw_info(coordinates_t *start_coordinates, game_t *game) {
 	cputs("f       = finish the game");*/
 	gotoxy(start_coordinates->x, start_coordinates->y++);
 	gotoxy(start_coordinates->x, start_coordinates->y++);
-	cputs("White player score: ");
-	cputs(converted_white_score);
+	printf("White player score: %.1f", game->score->white_player);
 	gotoxy(start_coordinates->x, start_coordinates->y++);
-	cputs("Black player score: ");
-	cputs(converted_black_score);
+	printf("Black player score: %.1f", game->score->black_player);
 	gotoxy(start_coordinates->x, start_coordinates->y++);
-	cputs("Current coordinates: (");
-	cputs(converted_position_x);
-	putch(',');
-	cputs(converted_position_y);
-	putch(')');
-	delete converted_position_x;
-	delete converted_position_y;
-	delete converted_white_score;
-	delete converted_black_score;
+	printf("Current coordinates: (%d, %d)", game->cursor_position->x, game->cursor_position->y);
 }
 
 void clear_screen() {
@@ -241,14 +229,27 @@ board_t* copy_board(board_t* board) {
 	return new_board;
 }
 
-game_t *initialize_game() {
+int compare_boards(board_t* board_1, board_t* board_2) {
+	for (int i = 0; i < board_1->size; i++) {
+		for (int j = 0; j < board_1->size; j++) {
+			if (board_1->fields[i][j] != board_2->fields[i][j]) {
+				return 0;
+			}
+		}
+	}
+	return 1;
+}
+
+game_t *initialize_game(int board_size) {
 	game_t *game = new game_t;
 	game->cursor_position = new coordinates_t;
 	game->cursor_position->x = 0;
 	game->cursor_position->y = 0;
-	game->score.white_player = 0;
-	game->score.black_player = 0;
-	game->board = initialize_board(BOARD_SIZE);
+	game->score = new score_t;
+	game->score->white_player = 0;
+	game->score->black_player = 0;
+	game->board = initialize_board(board_size);
+	game->previous_board = NULL;
 	game->current_player = 1;
 	return game;
 }
@@ -258,7 +259,6 @@ void free_board_memory(board_t* board) {
 		delete board->fields[i];
 	}
 	delete board->fields;
-	delete board;
 }
 
 void free_game_memory(game_t *game) {
@@ -292,19 +292,18 @@ void display_info_dialog(char* message, coordinates_t* dialog_position) {
 	cputs(message);
 	gotoxy(dialog_position->x, dialog_position->y++);
 	cputs("Press any button to continue");
+	getch();
 }
 
-game* start_new_game(game_t* game, coordinates_t* confirmation_position) {
+game *start_new_game(game_t* game, coordinates_t* confirmation_position) {
 	char message[] = "Do you want to start new game?";
 	int confirmation = display_confirmation_dialog(message, confirmation_position);
 	if (confirmation == 1) {
+		int board_size = game->board->size;
 		free_game_memory(game);
-		game = initialize_game();
-		return game;
+		game = initialize_game(board_size);
 	}
-	else if (confirmation == 0) {
-		return game;
-	}
+	return game;
 }
 
 int _count_group_liberties(board_t* board, coordinates_t* starting_position) {
@@ -362,39 +361,43 @@ int count_group_liberties(board_t* board, coordinates_t* starting_position) {
 	board_t* new_board = copy_board(board);
 	int liberties = _count_group_liberties(new_board, starting_position);
 	free_board_memory(new_board);
+	delete new_board;
 	return liberties;
 }
 
-void remove_group(board_t *board, coordinates_t *starting_position) {
+int remove_group(board_t *board, coordinates_t *starting_position) {
+	int removed_stones = 0;
 	char current_color = board->fields[starting_position->x][starting_position->y];
 	if (current_color == 0) {
-		return;
+		return 0;
 	}
 	*(&(board->fields[starting_position->x][starting_position->y])) = 0;
+	removed_stones++;
 	if (starting_position->x > 0) {
 		if (board->fields[starting_position->x - 1][starting_position->y] == current_color) {
 			coordinates_t new_starting_position = { starting_position->x - 1, starting_position->y };
-			remove_group(board, &new_starting_position);
+			removed_stones += remove_group(board, &new_starting_position);
 		}
 	}
 	if (starting_position->x < (board->size - 1)) {
 		if (board->fields[starting_position->x + 1][starting_position->y] == current_color) {
 			coordinates_t new_starting_position = { starting_position->x + 1, starting_position->y };
-			remove_group(board, &new_starting_position);
+			removed_stones += remove_group(board, &new_starting_position);
 		}
 	}
 	if (starting_position->y > 0) {
 		if (board->fields[starting_position->x][starting_position->y - 1] == current_color) {
 			coordinates_t new_starting_position = { starting_position->x, starting_position->y - 1 };
-			remove_group(board, &new_starting_position);
+			removed_stones += remove_group(board, &new_starting_position);
 		}
 	}
 	if (starting_position->y < (board->size - 1)) {
 		if (board->fields[starting_position->x][starting_position->y + 1] == current_color) {
 			coordinates_t new_starting_position = { starting_position->x, starting_position->y + 1 };
-			remove_group(board, &new_starting_position);
+			removed_stones += remove_group(board, &new_starting_position);
 		}
 	}
+	return removed_stones;
 }
 
 int get_liberties_after_placing_stone(game_t* game, coordinates_t *cursor_position) {
@@ -402,6 +405,7 @@ int get_liberties_after_placing_stone(game_t* game, coordinates_t *cursor_positi
 	new_board->fields[game->cursor_position->x][game->cursor_position->y] = game->current_player;
 	int liberties = _count_group_liberties(new_board, cursor_position);
 	free_board_memory(new_board);
+	delete new_board;
 	return liberties;
 }
 
@@ -453,69 +457,91 @@ int can_stone_be_placed_here(game_t *game) {
 	return 0;
 }
 
-void remove_neighbours_if_possible(game_t* game) {
-	if (game->cursor_position->x > 0) {
-		if (game->board->fields[game->cursor_position->x - 1][game->cursor_position->y] == game->current_player) {
-			coordinates_t neighbour_liberties_position = { game->cursor_position->x - 1 , game->cursor_position->y };
-			int neighbour_liberties = count_group_liberties(game->board, &neighbour_liberties_position);
+void remove_neighbours_if_possible(coordinates_t *cursor_position, board_t *board, char current_player, score_t *score) {
+	int score_points = 0;
+	if (cursor_position->x > 0) {
+		if (board->fields[cursor_position->x - 1][cursor_position->y] != current_player) {
+			coordinates_t neighbour_liberties_position = { cursor_position->x - 1 , cursor_position->y };
+			int neighbour_liberties = count_group_liberties(board, &neighbour_liberties_position);
 			if (neighbour_liberties == 0) {
-				remove_group(game->board, &neighbour_liberties_position);
+				score_points += remove_group(board, &neighbour_liberties_position);
 			}
 		}
 	}
-	if (game->cursor_position->x < (game->board->size - 1)) {
-		if (game->board->fields[game->cursor_position->x + 1][game->cursor_position->y] == game->current_player) {
-			coordinates_t neighbour_liberties_position = { game->cursor_position->x + 1 , game->cursor_position->y };
-			int neighbour_liberties = count_group_liberties(game->board, &neighbour_liberties_position);
+	if (cursor_position->x < (board->size - 1)) {
+		if (board->fields[cursor_position->x + 1][cursor_position->y] != current_player) {
+			coordinates_t neighbour_liberties_position = { cursor_position->x + 1 , cursor_position->y };
+			int neighbour_liberties = count_group_liberties(board, &neighbour_liberties_position);
 			if (neighbour_liberties == 0) {
-				remove_group(game->board, &neighbour_liberties_position);
+				score_points += remove_group(board, &neighbour_liberties_position);
 			}
 		}
 	}
-	if (game->cursor_position->y > 0) {
-		if (game->board->fields[game->cursor_position->x][game->cursor_position->y - 1] == game->current_player) {
-			coordinates_t neighbour_liberties_position = { game->cursor_position->x, game->cursor_position->y - 1 };
-			int neighbour_liberties = count_group_liberties(game->board, &neighbour_liberties_position);
+	if (cursor_position->y > 0) {
+		if (board->fields[cursor_position->x][cursor_position->y - 1] != current_player) {
+			coordinates_t neighbour_liberties_position = { cursor_position->x, cursor_position->y - 1 };
+			int neighbour_liberties = count_group_liberties(board, &neighbour_liberties_position);
 			if (neighbour_liberties == 0) {
-				remove_group(game->board, &neighbour_liberties_position);
+				score_points += remove_group(board, &neighbour_liberties_position);
 			}
 		}
 	}
-	if (game->cursor_position->y < (game->board->size - 1)) {
-		if (game->board->fields[game->cursor_position->x][game->cursor_position->y + 1] == game->current_player) {
-			coordinates_t neighbour_liberties_position = { game->cursor_position->x , game->cursor_position->y + 1 };
-			int neighbour_liberties = count_group_liberties(game->board, &neighbour_liberties_position);
+	if (cursor_position->y < (board->size - 1)) {
+		if (board->fields[cursor_position->x][cursor_position->y + 1] != current_player) {
+			coordinates_t neighbour_liberties_position = { cursor_position->x , cursor_position->y + 1 };
+			int neighbour_liberties = count_group_liberties(board, &neighbour_liberties_position);
 			if (neighbour_liberties == 0) {
-				remove_group(game->board, &neighbour_liberties_position);
+				score_points += remove_group(board, &neighbour_liberties_position);
 			}
+		}
+	}
+	if (score != NULL) {
+		if (current_player == 1) {
+			score->white_player += (float)score_points;
+		}
+		else if (current_player == -1) {
+			score->white_player += (float)score_points;
 		}
 	}
 }
 
+int check_ko_rule (game_t *game) {
+	int result = 0;
+	board_t* next_board = copy_board(game->board);
+	next_board->fields[game->cursor_position->x][game->cursor_position->y] = game->current_player;
+	remove_neighbours_if_possible(game->cursor_position, next_board, game->current_player, NULL);
+	if (game->previous_board == NULL || compare_boards(next_board, game->previous_board) != 1) {
+		result = 1;
+	}
+	free_board_memory(next_board);
+	delete next_board;
+	return result;
+}
+
 void place_stone(game_t *game, coordinates_t *dialog_position) {
-	if (game->board->fields[game->cursor_position->x][game->cursor_position->y] == 0 && can_stone_be_placed_here(game) == 1) {
-		char message[] = "Do you want to place stone on this coordinates?";
-		int confirmation = display_confirmation_dialog(message, dialog_position);
-		if (confirmation == 1) {
+	if (game->board->fields[game->cursor_position->x][game->cursor_position->y] == 0 && can_stone_be_placed_here(game) == 1 && check_ko_rule(game) == 1) {
+			char message[] = "Do you want to place stone on this coordinates?";
+			int confirmation = display_confirmation_dialog(message, dialog_position);
+			if (confirmation == 1) {
+				if (game->previous_board != NULL) {
+					free_board_memory(game->previous_board);
+				}
+				game->previous_board = copy_board(game->board);
 				game->board->fields[game->cursor_position->x][game->cursor_position->y] = game->current_player;
+				remove_neighbours_if_possible(game->cursor_position, game->board, game->current_player, game->score);
 				game->current_player = -1 * game->current_player;
-				remove_neighbours_if_possible(game);
-		}
-		else if (confirmation == 0) {
-			return;
-		}
+			}
 	}
 	else {
 		char message[] = "You cannot place stone here";
 		display_info_dialog(message, dialog_position);
-		getch();
 	}
 }
 
 int main() {
 	int zn = 0;
 	coordinates_t cursor_board_position = { 0, 0 };
-	game_t *game = initialize_game();
+	game_t *game = initialize_game(BOARD_SIZE);
 
 #ifndef __cplusplus
 	Conio2_Init();
