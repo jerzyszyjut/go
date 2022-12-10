@@ -52,6 +52,8 @@ typedef struct game {
 	char current_player;
 } game_t;
 
+/* General utilities functions */
+
 void input_string(char* target, int limit) {
 	int i = 0;
 	char temp;
@@ -73,6 +75,167 @@ int string_to_int(char* string) {
 		result += (string[i] - '0');
 	}
 	return result;
+}
+
+/* Game utilities functions */
+
+coordinates_t* get_cursor_position_from_board_position(coordinates_t cursor_board_position, coordinates_t board_beggining) {
+	coordinates_t* cursor_screen_position = new coordinates_t;
+	cursor_screen_position->x = BOARD_GAP_SIZE_X * (cursor_board_position.x) + board_beggining.x + BORDER_WIDTH;
+	cursor_screen_position->y = BOARD_GAP_SIZE_Y * (cursor_board_position.y) + board_beggining.y + BORDER_WIDTH;
+	return cursor_screen_position;
+}
+
+int get_max_board_size(game_t* game, int info_width) {
+	text_info screen_info;
+	gettextinfo(&screen_info);
+
+	coordinates_t current_displayed_size = { (game->board->size * BOARD_GAP_SIZE_X) + 2 , (game->board->size * BOARD_GAP_SIZE_Y) + 2 };
+	coordinates_t displayed_size_limits;
+	if (current_displayed_size.x >= screen_info.screenwidth - info_width) {
+		displayed_size_limits.x = (screen_info.screenwidth - info_width - 2) / BOARD_GAP_SIZE_X;
+	}
+	else {
+		displayed_size_limits.x = game->board->size;
+	}
+	if (current_displayed_size.y >= screen_info.screenheight) {
+		displayed_size_limits.y = (screen_info.screenheight - 2) / BOARD_GAP_SIZE_Y;
+	}
+	else {
+		displayed_size_limits.y = game->board->size;
+	}
+
+	if (displayed_size_limits.x > displayed_size_limits.y) {
+		return displayed_size_limits.y;
+	}
+	else {
+		return displayed_size_limits.x;
+	}
+}
+
+board_t* initialize_board(int size) {
+	board_t* board = new board_t;
+	board->size = size;
+
+	char** fields = new char* [board->size];
+	for (int i = 0; i < board->size; i++) {
+		fields[i] = new char[board->size];
+	}
+
+	for (int i = 0; i < board->size; i++) {
+		for (int j = 0; j < board->size; j++) {
+			fields[i][j] = 0;
+		}
+	}
+
+	board->fields = fields;
+	return board;
+}
+
+void free_board_memory(board_t* board) {
+	if (board != NULL) {
+		for (int i = 0; i < board->size; i++) {
+			delete board->fields[i];
+		}
+		delete board->fields;
+	}
+}
+
+game_t* initialize_game(int board_size) {
+	game_t* game = new game_t;
+	game->cursor_position = new coordinates_t;
+	game->cursor_position->x = 0;
+	game->cursor_position->y = 0;
+	game->draw_board_position = new coordinates_t;
+	game->draw_board_position->x = 0;
+	game->draw_board_position->y = 0;
+	game->score = new score_t;
+	game->score->white_player = 0;
+	game->score->black_player = 6.5;
+	game->board = initialize_board(board_size);
+	game->previous_board = NULL;
+	game->current_player = 1;
+	return game;
+}
+
+void free_game_memory(game_t* game) {
+	if (game != NULL) {
+		free_board_memory(game->board);
+		delete game->board;
+		free_board_memory(game->previous_board);
+		delete game->previous_board;
+		delete game->score;
+		delete game->cursor_position;
+		delete game->draw_board_position;
+	}
+}
+
+board_t* copy_board(board_t* board) {
+	board_t* new_board = new board_t;
+	new_board->size = board->size;
+
+	char** fields = new char* [new_board->size];
+	for (int i = 0; i < new_board->size; i++) {
+		fields[i] = new char[new_board->size];
+	}
+
+	for (int i = 0; i < new_board->size; i++) {
+		for (int j = 0; j < new_board->size; j++) {
+			fields[i][j] = board->fields[i][j];
+		}
+	}
+
+	new_board->fields = fields;
+	return new_board;
+}
+
+int compare_boards(board_t* board_1, board_t* board_2) {
+	for (int i = 0; i < board_1->size; i++) {
+		for (int j = 0; j < board_1->size; j++) {
+			if (board_1->fields[i][j] != board_2->fields[i][j]) {
+				return 0;
+			}
+		}
+	}
+	return 1;
+}
+
+int get_board_size(coordinates_t* message_position) {
+	char board_size[10];
+	gotoxy(message_position->x, message_position->y++);
+	cputs("Choose board size:\n");
+	gotoxy(message_position->x, message_position->y++);
+	cputs("1 - 9x9\n");
+	gotoxy(message_position->x, message_position->y++);
+	cputs("2 - 13x13\n");
+	gotoxy(message_position->x, message_position->y++);
+	cputs("3 - 19x19\n");
+	gotoxy(message_position->x, message_position->y++);
+	cputs("4 - Custom\n");
+	gotoxy(message_position->x, message_position->y++);
+	switch (getch())
+	{
+	case '1':
+		return 9;
+	case '2':
+		return 13;
+	case '3':
+		return 19;
+	case '4':
+		cputs("Input board size: ");
+		input_string(board_size, 10);
+		return string_to_int(board_size);
+	default:
+		return 9;
+		break;
+	}
+}
+
+/* UI functions */
+
+void clear_screen() {
+	textbackground(DARKGRAY);
+	clrscr();
 }
 
 int draw_info(coordinates_t *start_coordinates, game_t *game) {
@@ -118,45 +281,6 @@ int draw_info(coordinates_t *start_coordinates, game_t *game) {
 	}
 	puts(buffer);
 	return max_width;
-}
-
-void clear_screen() {
-	textbackground(DARKGRAY);
-	clrscr();
-}
-
-coordinates_t *get_cursor_position_from_board_position(coordinates_t cursor_board_position, coordinates_t board_beggining) {
-	coordinates_t* cursor_screen_position = new coordinates_t;
-	cursor_screen_position->x = BOARD_GAP_SIZE_X * (cursor_board_position.x) + board_beggining.x + BORDER_WIDTH;
-	cursor_screen_position->y = BOARD_GAP_SIZE_Y * (cursor_board_position.y) + board_beggining.y + BORDER_WIDTH;
-	return cursor_screen_position;
-}
-
-int get_max_board_size(game_t *game, int info_width) {
-	text_info screen_info;
-	gettextinfo(&screen_info);
-
-	coordinates_t current_displayed_size = { (game->board->size * BOARD_GAP_SIZE_X) + 2 , (game->board->size * BOARD_GAP_SIZE_Y) + 2 };
-	coordinates_t displayed_size_limits;
-	if (current_displayed_size.x >= screen_info.screenwidth - info_width) {
-		displayed_size_limits.x = (screen_info.screenwidth - info_width - 2) / BOARD_GAP_SIZE_X;
-	}
-	else {
-		displayed_size_limits.x = game->board->size;
-	}
-	if (current_displayed_size.y >= screen_info.screenheight) {
-		displayed_size_limits.y = (screen_info.screenheight - 2) / BOARD_GAP_SIZE_Y;
-	}
-	else {
-		displayed_size_limits.y = game->board->size;
-	}
-
-	if (displayed_size_limits.x > displayed_size_limits.y) {
-		return displayed_size_limits.y;
-	}
-	else {
-		return displayed_size_limits.x;
-	}
 }
 
 void draw_board_and_cursor(game_t* game, int info_width) {
@@ -233,93 +357,6 @@ void draw_board_and_cursor(game_t* game, int info_width) {
 	delete displayed_cursor_position;
 }
 
-board_t *initialize_board(int size) {
-	board_t *board = new board_t;
-	board->size = size;
-
-	char** fields = new char*[board->size];
-	for (int i = 0; i < board->size; i++) {
-		fields[i] = new char[board->size];
-	}
-
-	for (int i = 0; i < board->size; i++) {
-		for (int j = 0; j < board->size; j++) {
-			fields[i][j] = 0;
-		}
-	}
-
-	board->fields = fields;
-	return board;
-}
-
-board_t* copy_board(board_t* board) {
-	board_t* new_board = new board_t;
-	new_board->size = board->size;
-
-	char** fields = new char* [new_board->size];
-	for (int i = 0; i < new_board->size; i++) {
-		fields[i] = new char[new_board->size];
-	}
-
-	for (int i = 0; i < new_board->size; i++) {
-		for (int j = 0; j < new_board->size; j++) {
-			fields[i][j] = board->fields[i][j];
-		}
-	}
-
-	new_board->fields = fields;
-	return new_board;
-}
-
-int compare_boards(board_t* board_1, board_t* board_2) {
-	for (int i = 0; i < board_1->size; i++) {
-		for (int j = 0; j < board_1->size; j++) {
-			if (board_1->fields[i][j] != board_2->fields[i][j]) {
-				return 0;
-			}
-		}
-	}
-	return 1;
-}
-
-game_t *initialize_game(int board_size) {
-	game_t *game = new game_t;
-	game->cursor_position = new coordinates_t;
-	game->cursor_position->x = 0;
-	game->cursor_position->y = 0;
-	game->draw_board_position = new coordinates_t;
-	game->draw_board_position->x = 0;
-	game->draw_board_position->y = 0;
-	game->score = new score_t;
-	game->score->white_player = 0;
-	game->score->black_player = 6.5;
-	game->board = initialize_board(board_size);
-	game->previous_board = NULL;
-	game->current_player = 1;
-	return game;
-}
-
-void free_board_memory(board_t* board) {
-	if (board != NULL) {
-		for (int i = 0; i < board->size; i++) {
-			delete board->fields[i];
-		}
-		delete board->fields;
-	}
-}
-
-void free_game_memory(game_t *game) {
-	if (game != NULL) {
-		free_board_memory(game->board);
-		delete game->board;
-		free_board_memory(game->previous_board);
-		delete game->previous_board;
-		delete game->score;
-		delete game->cursor_position;
-		delete game->draw_board_position;
-	}
-}
-
 int display_confirmation_dialog(char* message, coordinates_t* dialog_position) {
 	gotoxy(dialog_position->x, dialog_position->y++);
 	textcolor(RED);
@@ -349,36 +386,7 @@ void display_info_dialog(char* message, coordinates_t* dialog_position) {
 	getch();
 }
 
-int get_board_size(coordinates_t* message_position) {
-	char board_size[10];
-	gotoxy(message_position->x, message_position->y++);
-	cputs("Choose board size:\n");
-	gotoxy(message_position->x, message_position->y++);
-	cputs("1 - 9x9\n");
-	gotoxy(message_position->x, message_position->y++);
-	cputs("2 - 13x13\n");
-	gotoxy(message_position->x, message_position->y++);
-	cputs("3 - 19x19\n");
-	gotoxy(message_position->x, message_position->y++);
-	cputs("4 - Custom\n");
-	gotoxy(message_position->x, message_position->y++);
-	switch (getch())
-	{
-		case '1':
-			return 9;
-		case '2':
-			return 13;
-		case '3':
-			return 19;
-		case '4':
-			cputs("Input board size: ");
-			input_string(board_size, 10);
-			return string_to_int(board_size);
-		default:
-			return 9;
-			break;
-	}
-}
+/* Game mechanics functions */
 
 game *start_new_game(coordinates_t* message_position) {
 	int board_size = get_board_size(message_position);
@@ -579,7 +587,7 @@ void remove_neighbours_if_possible(coordinates_t *cursor_position, board_t *boar
 			score->white_player += (float)score_points;
 		}
 		else if (current_player == -1) {
-			score->white_player += (float)score_points;
+			score->black_player += (float)score_points;
 		}
 	}
 }
