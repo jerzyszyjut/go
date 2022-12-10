@@ -3,7 +3,6 @@
 #include"conio2.h"
 #include<string.h>
 
-#define BOARD_DISPLAYED_SIZE_LIMIT 27
 #define BOARD_GAP_SIZE_X 2
 #define BOARD_GAP_SIZE_Y 1
 #define BOARD_BEGGINING_X 1
@@ -11,6 +10,11 @@
 #define INFO_BEGGINING_X 1
 #define INFO_BEGGINING_Y 1
 #define BORDER_WIDTH 1
+
+#define RIGHT 1
+#define LEFT 0
+
+#define LEGEND_SIDE LEFT
 
 #define STARTING_WHITE_SCORE 0.0
 #define STARTING_BLACK_SCORE 6.5
@@ -105,6 +109,7 @@ int get_max_board_size(game_t* game, int info_width) {
 	else {
 		displayed_size_limits.x = game->board->size;
 	}
+
 	if (current_displayed_size.y >= screen_info.screenheight) {
 		displayed_size_limits.y = (screen_info.screenheight - 2) / BOARD_GAP_SIZE_Y;
 	}
@@ -118,6 +123,21 @@ int get_max_board_size(game_t* game, int info_width) {
 	else {
 		return displayed_size_limits.x;
 	}
+}
+
+int get_displayed_board_width(game_t* game, int info_width) {
+	text_info screen_info;
+	gettextinfo(&screen_info);
+
+	coordinates_t current_displayed_size = { (game->board->size * BOARD_GAP_SIZE_X) + 2 , (game->board->size * BOARD_GAP_SIZE_Y) + 2 };
+	coordinates_t displayed_size_limits;
+	if (current_displayed_size.x >= screen_info.screenwidth - info_width) {
+		displayed_size_limits.x = screen_info.screenwidth - info_width;
+	}
+	else {
+		displayed_size_limits.x = game->board->size * BOARD_GAP_SIZE_X + 2;
+	}
+	return displayed_size_limits.x;
 }
 
 board_t* initialize_board(int size) {
@@ -292,7 +312,13 @@ int draw_info(coordinates_t *start_coordinates, game_t *game) {
 
 void draw_board_and_cursor(game_t* game, int info_width) {
 	info_width++;
-	coordinates_t start_screen = { info_width, BOARD_BEGGINING_Y };
+	coordinates_t start_screen;
+	if (LEGEND_SIDE == LEFT) {
+		start_screen = { info_width, BOARD_BEGGINING_Y };
+	}
+	else if (LEGEND_SIDE == RIGHT) {
+		start_screen = { BOARD_BEGGINING_X, BOARD_BEGGINING_Y };
+	}
 
 	int displayed_size = get_max_board_size(game, info_width);
 
@@ -351,7 +377,7 @@ void draw_board_and_cursor(game_t* game, int info_width) {
 	}
 
 	coordinates_t limited_cursor_position = { game->cursor_position->x - game->draw_board_position->x, game->cursor_position->y - game->draw_board_position->y };
-	coordinates_t* displayed_cursor_position = get_cursor_position_from_board_position(limited_cursor_position, {info_width, BOARD_BEGGINING_Y});
+	coordinates_t* displayed_cursor_position = get_cursor_position_from_board_position(limited_cursor_position, start_screen);
 	gotoxy(displayed_cursor_position->x, displayed_cursor_position->y);
 	if (game->current_player == WHITE_PLAYER) {
 		textcolor(WHITE_PLAYER_COLOR);
@@ -777,7 +803,7 @@ game_t *handle_input(game_t *game, int *zn, coordinates_t *info_start_coordinate
 
 int main() {
 	int zn = 0;
-	int info_width = 0;
+	int info_width = 50;
 	coordinates_t cursor_board_position = { 0, 0 };
 	coordinates_t display_info_start_coordinates = { INFO_BEGGINING_X, INFO_BEGGINING_Y };
 	coordinates_t display_board_start_coordinates = { BOARD_BEGGINING_X, BOARD_BEGGINING_Y };
@@ -793,7 +819,12 @@ int main() {
 	do {
 		clear_screen();
 		
-		display_info_start_coordinates = { INFO_BEGGINING_X, INFO_BEGGINING_Y };
+		if (LEGEND_SIDE == LEFT) {
+			display_info_start_coordinates = { INFO_BEGGINING_X, INFO_BEGGINING_Y };
+		}
+		else if (LEGEND_SIDE == RIGHT) {
+			display_info_start_coordinates = { get_displayed_board_width(game, info_width) + 1, INFO_BEGGINING_Y};
+		}
 
 		info_width = draw_info(&display_info_start_coordinates, game);
 
