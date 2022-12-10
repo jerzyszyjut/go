@@ -38,7 +38,7 @@ typedef struct score {
 } score_t;
 
 typedef struct board {
-	char **fields;
+	char** fields;
 	int size;
 } board_t;
 
@@ -49,6 +49,29 @@ typedef struct game {
 	score_t* score;
 	char current_player;
 } game_t;
+
+void input_string(char* target, int limit) {
+	int i = 0;
+	char temp;
+	do {
+		temp = getche();
+		target[i] = temp;
+		i++;
+	} while (temp != '\n' && temp != '\r' && i<limit);
+	target[i-1] = '\0';
+}
+
+int string_to_int(char* string) {
+	int result = 0;
+	for (int i = 0; string[i] != '\0'; i++) {
+		result *= 10;
+		if (string[i] < '0' || string[i] > '9') {
+			return result;
+		}
+		result += (string[i] - '0');
+	}
+	return result;
+}
 
 void draw_info(coordinates_t *start_coordinates, game_t *game) {
 	char buffer[32];
@@ -292,15 +315,40 @@ void display_info_dialog(char* message, coordinates_t* dialog_position) {
 	getch();
 }
 
-game *start_new_game(game_t* game, coordinates_t* confirmation_position) {
-	char message[] = "Do you want to start new game?";
-	int confirmation = display_confirmation_dialog(message, confirmation_position);
-	if (confirmation == 1) {
-		int board_size = game->board->size;
-		free_game_memory(game);
-		game = initialize_game(board_size);
+int get_board_size(coordinates_t* message_position) {
+	char board_size[10];
+	gotoxy(message_position->x, message_position->y++);
+	cputs("Choose board size:\n");
+	gotoxy(message_position->x, message_position->y++);
+	cputs("1 - 9x9\n");
+	gotoxy(message_position->x, message_position->y++);
+	cputs("2 - 13x13\n");
+	gotoxy(message_position->x, message_position->y++);
+	cputs("3 - 19x19\n");
+	gotoxy(message_position->x, message_position->y++);
+	cputs("4 - Custom\n");
+	gotoxy(message_position->x, message_position->y++);
+	switch (getch())
+	{
+		case '1':
+			return 9;
+		case '2':
+			return 13;
+		case '3':
+			return 19;
+		case '4':
+			cputs("Input board size: ");
+			input_string(board_size, 10);
+			return string_to_int(board_size);
+		default:
+			return 9;
+			break;
 	}
-	return game;
+}
+
+game *start_new_game(coordinates_t* message_position) {
+	int board_size = get_board_size(message_position);
+	return initialize_game(board_size);
 }
 
 int _count_group_liberties(board_t* board, coordinates_t* starting_position) {
@@ -535,8 +583,8 @@ void place_stone(game_t *game, coordinates_t *dialog_position) {
 	}
 }
 
-void save_game_state(game_t* game) {
-	FILE* file = fopen(SAVE_FILE_NAME, "wb");
+void save_game_state(game_t* game, char *filename) {
+	FILE* file = fopen(filename, "wb");
 	if (file != NULL) {
 		fwrite(&(game->current_player), sizeof(game->current_player), 1, file);
 		fwrite(&(game->cursor_position->x), sizeof(game->cursor_position->x), 1, file);
@@ -565,8 +613,8 @@ void save_game_state(game_t* game) {
 	}
 }
 
-game_t* load_game_state() {
-	FILE* file = fopen(SAVE_FILE_NAME, "rb");
+game_t* load_game_state(char *filename) {
+	FILE* file = fopen(filename, "rb");
 	if (file != NULL) {
 		game_t* game = new game_t;
 		fread(&(game->current_player), sizeof(game->current_player), 1, file);
@@ -606,10 +654,49 @@ game_t* load_game_state() {
 	return NULL;
 }
 
+game_t *handle_input(game_t *game, int *zn, coordinates_t *info_start_coordinates) {
+	game_t* new_game;
+	char filename[64];
+	switch (*zn = getch())
+	{
+	case 0:
+		handle_movement(game->cursor_position, game->board->size);
+		break;
+	case 'i':
+		place_stone(game, info_start_coordinates);
+		break;
+	case 'n':
+		free_game_memory(game);
+		game = start_new_game(info_start_coordinates);
+		break;
+	case 's':
+		gotoxy(info_start_coordinates->x, info_start_coordinates->y++);
+		cputs("Specify save filename: \n");
+		gotoxy(info_start_coordinates->x, info_start_coordinates->y++);
+		input_string(filename, 64);
+		save_game_state(game, filename);
+		break;
+	case 'l':
+		gotoxy(info_start_coordinates->x, info_start_coordinates->y++);
+		cputs("Specify save filename: \n");
+		gotoxy(info_start_coordinates->x, info_start_coordinates->y++);
+		input_string(filename, 64);
+		new_game = load_game_state(filename);
+		if (new_game != NULL) {
+			free_game_memory(game);
+			game = new_game;
+		}
+		break;
+	default:
+		break;
+	}
+	return game;
+}
+
 int main() {
 	int zn = 0;
 	coordinates_t cursor_board_position = { 0, 0 };
-	game_t *game = initialize_game(BOARD_SIZE);
+	coordinates_t info_start_coordinates = { 1, 1 };
 
 #ifndef __cplusplus
 	Conio2_Init();
@@ -617,43 +704,23 @@ int main() {
 
 	settitle("Jerzy, Szyjut, 193064"); 
 	_setcursortype(_NOCURSOR);
+	game_t* game = start_new_game(&cursor_board_position);
 	do {
 		clear_screen();
 		
-		coordinates_t info_start_coordinates = { 1, 1 };
+		info_start_coordinates = { 1, 1 };
+
 		draw_info(&info_start_coordinates, game);
 
 		draw_board(game->board, { BOARD_BEGGINING_X, BOARD_BEGGINING_Y });
 
 		draw_cursor(game, game->current_player);
 		
-		switch (zn = getch())
-		{
-			case 0:
-				handle_movement(game->cursor_position, game->board->size);
-				break;
-			case 'i':
-				place_stone(game, &info_start_coordinates);
-				break;
-			case 'n':
-				game = start_new_game(game, &info_start_coordinates);
-			case 's':
-				save_game_state(game);
-				break;
-			case 'l':
-				game_t * new_game;
-				new_game = load_game_state();
-				if (new_game != NULL) {
-					free_game_memory(game);
-					game = new_game;
-				}
-				break;
-			default:
-				break;
-		}
+		game = handle_input(game, &zn, &info_start_coordinates);
 	} while (zn != 'q');
 
 	_setcursortype(_NORMALCURSOR);
 	free_game_memory(game);
+	delete game;
 	return 0;
 }
