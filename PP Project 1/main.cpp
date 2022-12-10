@@ -1,14 +1,17 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include<stdio.h>
 #include"conio2.h"
-#include<math.h>
+#include<string.h>
 
-#define BOARD_SIZE 13
-#define BOARD_BEGGINING_X 50
-#define BOARD_BEGGINING_Y 1
+#define BOARD_DISPLAYED_SIZE_LIMIT 27
 #define BOARD_GAP_SIZE_X 2
 #define BOARD_GAP_SIZE_Y 1
-#define BOARD_SIZE_LIMIT 20
+#define BOARD_BEGGINING_X 1
+#define BOARD_BEGGINING_Y 1
+#define INFO_BEGGINING_X 1
+#define INFO_BEGGINING_Y 1
+#define BORDER_WIDTH 1
+
 
 #define TEXT_COLOR BLUE
 #define BACKGROUND_COLOR DARKGRAY
@@ -24,8 +27,6 @@
 #define ESCAPE 0x1b
 
 #define CURSOR 'X'
-
-#define SAVE_FILE_NAME "game.bin"
 
 typedef struct coordinates {
 	int x;
@@ -44,6 +45,7 @@ typedef struct board {
 
 typedef struct game {
 	coordinates_t* cursor_position;
+	coordinates_t* draw_board_position;
 	board_t* board;
 	board_t* previous_board;
 	score_t* score;
@@ -64,18 +66,19 @@ void input_string(char* target, int limit) {
 int string_to_int(char* string) {
 	int result = 0;
 	for (int i = 0; string[i] != '\0'; i++) {
-		result *= 10;
 		if (string[i] < '0' || string[i] > '9') {
 			return result;
 		}
+		result *= 10;
 		result += (string[i] - '0');
 	}
 	return result;
 }
 
-void draw_info(coordinates_t *start_coordinates, game_t *game) {
-	char buffer[32];
+int draw_info(coordinates_t *start_coordinates, game_t *game) {
+	char buffer[48];
 	textcolor(TEXT_COLOR);
+	int max_width;
 	gotoxy(start_coordinates->x, start_coordinates->y++);
 	cputs("Jerzy, Szyjut, 193064");
 	gotoxy(start_coordinates->x, start_coordinates->y++);
@@ -86,6 +89,7 @@ void draw_info(coordinates_t *start_coordinates, game_t *game) {
 	cputs("n       = start new game");
 	gotoxy(start_coordinates->x, start_coordinates->y++);
 	cputs("enter   = confirm choice and end player's turn");
+	max_width = 47;
 	gotoxy(start_coordinates->x, start_coordinates->y++);
 	cputs("esc     = cancel current action");
 	gotoxy(start_coordinates->x, start_coordinates->y++);
@@ -94,15 +98,26 @@ void draw_info(coordinates_t *start_coordinates, game_t *game) {
 	cputs("s       = save the game state");
 	gotoxy(start_coordinates->x, start_coordinates->y++);
 	cputs("l       = load the game state");
-	/*gotoxy(start_coordinates->x, start_coordinates->y++);
-	cputs("f       = finish the game");*/
 	gotoxy(start_coordinates->x, start_coordinates->y++);
 	gotoxy(start_coordinates->x, start_coordinates->y++);
-	printf("White player score: %.1f", game->score->white_player);
+	sprintf(buffer, "White player score: %.1f", game->score->white_player);
+	if (strlen(buffer) > max_width) {
+		max_width = strlen(buffer);
+	}
+	puts(buffer);
 	gotoxy(start_coordinates->x, start_coordinates->y++);
-	printf("Black player score: %.1f", game->score->black_player);
+	sprintf(buffer, "Black player score: %.1f", game->score->black_player);
+	if (strlen(buffer) > max_width) {
+		max_width = strlen(buffer);
+	}
+	puts(buffer);
 	gotoxy(start_coordinates->x, start_coordinates->y++);
-	printf("Current coordinates: (%d, %d)", game->cursor_position->x, game->cursor_position->y);
+	sprintf(buffer, "Current coordinates: (%d, %d)", game->cursor_position->x, game->cursor_position->y);
+	if (strlen(buffer) > max_width) {
+		max_width = strlen(buffer);
+	}
+	puts(buffer);
+	return max_width;
 }
 
 void clear_screen() {
@@ -110,72 +125,74 @@ void clear_screen() {
 	clrscr();
 }
 
-coordinates_t *get_cursor_position_from_board_position(coordinates_t *cursor_board_position) {
+coordinates_t *get_cursor_position_from_board_position(coordinates_t cursor_board_position, coordinates_t board_beggining) {
 	coordinates_t* cursor_screen_position = new coordinates_t;
-	cursor_screen_position->x = BOARD_GAP_SIZE_X * (cursor_board_position->x + 1) + BOARD_BEGGINING_X;
-	cursor_screen_position->y = BOARD_GAP_SIZE_Y * (cursor_board_position->y + 1) + BOARD_BEGGINING_Y;
+	cursor_screen_position->x = BOARD_GAP_SIZE_X * (cursor_board_position.x) + board_beggining.x + BORDER_WIDTH;
+	cursor_screen_position->y = BOARD_GAP_SIZE_Y * (cursor_board_position.y) + board_beggining.y + BORDER_WIDTH;
 	return cursor_screen_position;
 }
 
-void draw_cursor(game_t *game, char current_player) {
-	coordinates_t *cursor_position = get_cursor_position_from_board_position(game->cursor_position);
-	gotoxy(cursor_position->x, cursor_position->y);
-	if (current_player == 1) {
-		textcolor(PLAYER_1_COLOR);
+int get_max_board_size(game_t *game, int info_width) {
+	text_info screen_info;
+	gettextinfo(&screen_info);
+
+	coordinates_t current_displayed_size = { (game->board->size * BOARD_GAP_SIZE_X) + 2 , (game->board->size * BOARD_GAP_SIZE_Y) + 2 };
+	coordinates_t displayed_size_limits;
+	if (current_displayed_size.x >= screen_info.screenwidth - info_width) {
+		displayed_size_limits.x = (screen_info.screenwidth - info_width - 2) / BOARD_GAP_SIZE_X;
 	}
-	else if (current_player == -1) {
-		textcolor(PLAYER_2_COLOR);
+	else {
+		displayed_size_limits.x = game->board->size;
 	}
-	textbackground(BACKGROUND_COLOR);
-	putch(CURSOR);
-	delete cursor_position;
+	if (current_displayed_size.y >= screen_info.screenheight) {
+		displayed_size_limits.y = (screen_info.screenheight - 2) / BOARD_GAP_SIZE_Y;
+	}
+	else {
+		displayed_size_limits.y = game->board->size;
+	}
+
+	if (displayed_size_limits.x > displayed_size_limits.y) {
+		return displayed_size_limits.y;
+	}
+	else {
+		return displayed_size_limits.x;
+	}
 }
 
-void handle_movement(coordinates_t *cursor_board_position, int board_size) {
-	int zn;
-	zn = getch();
-	if (zn == ARROW_DOWN)
-	{
-		if (cursor_board_position->y > 0) {
-			cursor_board_position->y--;
-		}
-	}
-	else if (zn == ARROW_UP)
-	{
-		if (cursor_board_position->y < board_size - 1) {
-			cursor_board_position->y++;
-		}
-	}
-	else if (zn == ARROW_LEFT)
-	{
-		if (cursor_board_position->x > 0) {
-			cursor_board_position->x--;
-		}
-	}
-	else if (zn == ARROW_RIGHT) {
-		if (cursor_board_position->x < board_size - 1) {
-			cursor_board_position->x++;
-		}
-	};
-}
+void draw_board_and_cursor(game_t* game, int info_width) {
+	info_width++;
+	coordinates_t start_screen = { info_width, BOARD_BEGGINING_Y };
 
-void draw_board(board_t *board, coordinates_t start) {
-	int displayed_size = board->size;
-	coordinates_t board_limits;
-	board_limits.x = (displayed_size+ 1)*BOARD_GAP_SIZE_X + start.x;
-	board_limits.y = (displayed_size+ 1)*BOARD_GAP_SIZE_Y + start.y;
-	coordinates_t board_coordinates;
-	for (int y = start.y; y <= board_limits.y; y++) {
-		for (int x = start.x; x <= board_limits.x; x++) {
+	int displayed_size = get_max_board_size(game, info_width);
+
+	if (game->cursor_position->x - game->draw_board_position->x >= displayed_size) {
+		game->draw_board_position->x++;
+	}
+	else if (game->cursor_position->x - game->draw_board_position->x < 0) {
+		game->draw_board_position->x--;
+	}
+	else if (game->cursor_position->y - game->draw_board_position->y >= displayed_size) {
+		game->draw_board_position->y++;
+	}
+	else if (game->cursor_position->y - game->draw_board_position->y < 0) {
+		game->draw_board_position->y--;
+	}
+
+	coordinates_t limits;
+	limits.x = start_screen.x + ((displayed_size - 1)*BOARD_GAP_SIZE_X) + 2 * BORDER_WIDTH;
+	limits.y = start_screen.y + ((displayed_size - 1)*BOARD_GAP_SIZE_Y) + 2 * BORDER_WIDTH;
+
+	for (int x = start_screen.x; x <= limits.x; x++) {
+		for (int y = start_screen.y; y <= limits.y; y++) {
 			gotoxy(x, y);
-			board_coordinates = { ((x - start.x - 1) / BOARD_GAP_SIZE_X), ((y - start.y - 1) / BOARD_GAP_SIZE_Y) };
-			if (x == start.x || x == board_limits.x || y == start.y || y == board_limits.y ) {
+			if (x == start_screen.x || x == limits.x || y == start_screen.y || y == limits.y) {
 				textcolor(BORDER_COLOR);
 				putch('*');
 			}
 			else {
-				if (((x - start.x) % BOARD_GAP_SIZE_X == 0) && ((y - start.y) % BOARD_GAP_SIZE_Y == 0)) {
-					switch (board->fields[board_coordinates.x][board_coordinates.y])
+				if (((x - start_screen.x - 1) % BOARD_GAP_SIZE_X == 0) && ((y - start_screen.y - 1) % BOARD_GAP_SIZE_Y == 0)) {
+					coordinates_t board_coordinates = { ((x - start_screen.x - 1) / BOARD_GAP_SIZE_X), ((y - start_screen.y - 1) / BOARD_GAP_SIZE_Y) };
+					switch (game->board->fields[board_coordinates.x + game->draw_board_position->x][board_coordinates.y + game->draw_board_position->y])
 					{
 					case -1:
 						textcolor(BLACK);
@@ -192,15 +209,28 @@ void draw_board(board_t *board, coordinates_t start) {
 					}
 					textcolor(TEXT_COLOR);
 				}
-				else if ((BOARD_GAP_SIZE_X > 1 && BOARD_GAP_SIZE_Y > 1) && (x - start.x) % BOARD_GAP_SIZE_X == 0) {
+				else if ((BOARD_GAP_SIZE_X > 1 && BOARD_GAP_SIZE_Y > 1) && (x - start_screen.x) % BOARD_GAP_SIZE_X == 0) {
 					putch('|');
 				}
-				else if ((BOARD_GAP_SIZE_X > 1 && BOARD_GAP_SIZE_Y > 1) && (y - start.y) % BOARD_GAP_SIZE_Y == 0) {
+				else if ((BOARD_GAP_SIZE_X > 1 && BOARD_GAP_SIZE_Y > 1) && (y - start_screen.y) % BOARD_GAP_SIZE_Y == 0) {
 					putch('-');
 				}
 			}
 		}
 	}
+
+	coordinates_t limited_cursor_position = { game->cursor_position->x - game->draw_board_position->x, game->cursor_position->y - game->draw_board_position->y };
+	coordinates_t* displayed_cursor_position = get_cursor_position_from_board_position(limited_cursor_position, {info_width, BOARD_BEGGINING_Y});
+	gotoxy(displayed_cursor_position->x, displayed_cursor_position->y);
+	if (game->current_player == 1) {
+		textcolor(PLAYER_1_COLOR);
+	}
+	else if (game->current_player == -1) {
+		textcolor(PLAYER_2_COLOR);
+	}
+	textbackground(BACKGROUND_COLOR);
+	putch(CURSOR);
+	delete displayed_cursor_position;
 }
 
 board_t *initialize_board(int size) {
@@ -257,9 +287,12 @@ game_t *initialize_game(int board_size) {
 	game->cursor_position = new coordinates_t;
 	game->cursor_position->x = 0;
 	game->cursor_position->y = 0;
+	game->draw_board_position = new coordinates_t;
+	game->draw_board_position->x = 0;
+	game->draw_board_position->y = 0;
 	game->score = new score_t;
 	game->score->white_player = 0;
-	game->score->black_player = 0;
+	game->score->black_player = 6.5;
 	game->board = initialize_board(board_size);
 	game->previous_board = NULL;
 	game->current_player = 1;
@@ -283,6 +316,7 @@ void free_game_memory(game_t *game) {
 		delete game->previous_board;
 		delete game->score;
 		delete game->cursor_position;
+		delete game->draw_board_position;
 	}
 }
 
@@ -588,7 +622,9 @@ void save_game_state(game_t* game, char *filename) {
 	if (file != NULL) {
 		fwrite(&(game->current_player), sizeof(game->current_player), 1, file);
 		fwrite(&(game->cursor_position->x), sizeof(game->cursor_position->x), 1, file);
-		fwrite(&(game->cursor_position->y), sizeof(game->cursor_position->x), 1, file);
+		fwrite(&(game->cursor_position->y), sizeof(game->cursor_position->y), 1, file);
+		fwrite(&(game->draw_board_position->x), sizeof(game->draw_board_position->x), 1, file);
+		fwrite(&(game->draw_board_position->y), sizeof(game->draw_board_position->y), 1, file);
 		fwrite(&(game->score->white_player), sizeof(game->score->white_player), 1, file);
 		fwrite(&(game->score->black_player), sizeof(game->score->black_player), 1, file);
 		fwrite(&(game->board->size), sizeof(game->board->size), 1, file);
@@ -620,7 +656,10 @@ game_t* load_game_state(char *filename) {
 		fread(&(game->current_player), sizeof(game->current_player), 1, file);
 		game->cursor_position = new coordinates_t;
 		fread(&(game->cursor_position->x), sizeof(game->cursor_position->x), 1, file);
-		fread(&(game->cursor_position->y), sizeof(game->cursor_position->x), 1, file);
+		fread(&(game->cursor_position->y), sizeof(game->cursor_position->y), 1, file);
+		game->draw_board_position = new coordinates_t;
+		fread(&(game->draw_board_position->x), sizeof(game->draw_board_position->x), 1, file);
+		fread(&(game->draw_board_position->y), sizeof(game->draw_board_position->y), 1, file);
 		game->score = new score_t;
 		fread(&(game->score->white_player), sizeof(game->score->white_player), 1, file);
 		fread(&(game->score->black_player), sizeof(game->score->black_player), 1, file);
@@ -652,6 +691,34 @@ game_t* load_game_state(char *filename) {
 		return game;
 	}
 	return NULL;
+}
+
+void handle_movement(coordinates_t* cursor_board_position, int board_size) {
+	int zn;
+	zn = getch();
+	if (zn == ARROW_DOWN)
+	{
+		if (cursor_board_position->y > 0) {
+			cursor_board_position->y--;
+		}
+	}
+	else if (zn == ARROW_UP)
+	{
+		if (cursor_board_position->y < board_size - 1) {
+			cursor_board_position->y++;
+		}
+	}
+	else if (zn == ARROW_LEFT)
+	{
+		if (cursor_board_position->x > 0) {
+			cursor_board_position->x--;
+		}
+	}
+	else if (zn == ARROW_RIGHT) {
+		if (cursor_board_position->x < board_size - 1) {
+			cursor_board_position->x++;
+		}
+	};
 }
 
 game_t *handle_input(game_t *game, int *zn, coordinates_t *info_start_coordinates) {
@@ -695,8 +762,11 @@ game_t *handle_input(game_t *game, int *zn, coordinates_t *info_start_coordinate
 
 int main() {
 	int zn = 0;
+	int info_width = 0;
 	coordinates_t cursor_board_position = { 0, 0 };
-	coordinates_t info_start_coordinates = { 1, 1 };
+	coordinates_t display_info_start_coordinates = { INFO_BEGGINING_X, INFO_BEGGINING_Y };
+	coordinates_t display_board_start_coordinates = { BOARD_BEGGINING_X, BOARD_BEGGINING_Y };
+	coordinates_t scroll_board_start_coordinates = { 0, 0 };
 
 #ifndef __cplusplus
 	Conio2_Init();
@@ -708,15 +778,13 @@ int main() {
 	do {
 		clear_screen();
 		
-		info_start_coordinates = { 1, 1 };
+		display_info_start_coordinates = { INFO_BEGGINING_X, INFO_BEGGINING_Y };
 
-		draw_info(&info_start_coordinates, game);
+		info_width = draw_info(&display_info_start_coordinates, game);
 
-		draw_board(game->board, { BOARD_BEGGINING_X, BOARD_BEGGINING_Y });
-
-		draw_cursor(game, game->current_player);
+		draw_board_and_cursor(game, info_width);
 		
-		game = handle_input(game, &zn, &info_start_coordinates);
+		game = handle_input(game, &zn, &display_info_start_coordinates);
 	} while (zn != 'q');
 
 	_setcursortype(_NORMALCURSOR);
