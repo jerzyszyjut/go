@@ -25,6 +25,8 @@
 
 #define CURSOR 'X'
 
+#define SAVE_FILE_NAME "game.bin"
+
 typedef struct coordinates {
 	int x;
 	int y;
@@ -48,19 +50,6 @@ typedef struct game {
 	char current_player;
 } game_t;
 
-char* int_to_char(int number) {
-	int number_length = (int)lround(floor(log10(number))) + 1;
-	char *converted_number = new char[number_length + 1];
-	for (int i = 1; i <= number_length; i++) {
-		int modulo = number % (10 * i);
-		converted_number[number_length - i] = (char)('0' + (char)modulo);
-		number -= modulo;
-		number /= 10;
-	}
-	converted_number[number_length] = '\0';
-	return converted_number;
-}
-
 void draw_info(coordinates_t *start_coordinates, game_t *game) {
 	char buffer[32];
 	textcolor(TEXT_COLOR);
@@ -78,11 +67,11 @@ void draw_info(coordinates_t *start_coordinates, game_t *game) {
 	cputs("esc     = cancel current action");
 	gotoxy(start_coordinates->x, start_coordinates->y++);
 	cputs("i       = place a stone on the board");
-	/*gotoxy(start_coordinates->x, start_coordinates->y++);
+	gotoxy(start_coordinates->x, start_coordinates->y++);
 	cputs("s       = save the game state");
 	gotoxy(start_coordinates->x, start_coordinates->y++);
 	cputs("l       = load the game state");
-	gotoxy(start_coordinates->x, start_coordinates->y++);
+	/*gotoxy(start_coordinates->x, start_coordinates->y++);
 	cputs("f       = finish the game");*/
 	gotoxy(start_coordinates->x, start_coordinates->y++);
 	gotoxy(start_coordinates->x, start_coordinates->y++);
@@ -255,15 +244,23 @@ game_t *initialize_game(int board_size) {
 }
 
 void free_board_memory(board_t* board) {
-	for (int i = 0; i < board->size; i++) {
-		delete board->fields[i];
+	if (board != NULL) {
+		for (int i = 0; i < board->size; i++) {
+			delete board->fields[i];
+		}
+		delete board->fields;
 	}
-	delete board->fields;
 }
 
 void free_game_memory(game_t *game) {
-	free_board_memory(game->board);
-	delete game->cursor_position;
+	if (game != NULL) {
+		free_board_memory(game->board);
+		delete game->board;
+		free_board_memory(game->previous_board);
+		delete game->previous_board;
+		delete game->score;
+		delete game->cursor_position;
+	}
 }
 
 int display_confirmation_dialog(char* message, coordinates_t* dialog_position) {
@@ -538,6 +535,77 @@ void place_stone(game_t *game, coordinates_t *dialog_position) {
 	}
 }
 
+void save_game_state(game_t* game) {
+	FILE* file = fopen(SAVE_FILE_NAME, "wb");
+	if (file != NULL) {
+		fwrite(&(game->current_player), sizeof(game->current_player), 1, file);
+		fwrite(&(game->cursor_position->x), sizeof(game->cursor_position->x), 1, file);
+		fwrite(&(game->cursor_position->y), sizeof(game->cursor_position->x), 1, file);
+		fwrite(&(game->score->white_player), sizeof(game->score->white_player), 1, file);
+		fwrite(&(game->score->black_player), sizeof(game->score->black_player), 1, file);
+		fwrite(&(game->board->size), sizeof(game->board->size), 1, file);
+		for (int x = 0; x < game->board->size; x++) {
+			for (int y = 0; y < game->board->size; y++) {
+				fwrite(&(game->board->fields[x][y]), sizeof(char), 1, file);
+			}
+		}		
+		if (game->previous_board != NULL) {
+			fwrite(&(game->previous_board->size), sizeof(game->previous_board->size), 1, file);
+			for (int x = 0; x < game->previous_board->size; x++) {
+				for (int y = 0; y < game->previous_board->size; y++) {
+					fwrite(&(game->previous_board->fields[x][y]), sizeof(char), 1, file);
+				}
+			}
+		}
+		else{
+			int minus_one = -1;
+			fwrite(&minus_one, sizeof(minus_one), 1, file);
+		}
+		fclose(file);
+	}
+}
+
+game_t* load_game_state() {
+	FILE* file = fopen(SAVE_FILE_NAME, "rb");
+	if (file != NULL) {
+		game_t* game = new game_t;
+		fread(&(game->current_player), sizeof(game->current_player), 1, file);
+		game->cursor_position = new coordinates_t;
+		fread(&(game->cursor_position->x), sizeof(game->cursor_position->x), 1, file);
+		fread(&(game->cursor_position->y), sizeof(game->cursor_position->x), 1, file);
+		game->score = new score_t;
+		fread(&(game->score->white_player), sizeof(game->score->white_player), 1, file);
+		fread(&(game->score->black_player), sizeof(game->score->black_player), 1, file);
+		game->board = new board_t;
+		fread(&(game->board->size), sizeof(game->board->size), 1, file);
+		game->board->fields = new char*[game->board->size];
+		for (int x = 0; x < game->board->size; x++) {
+			game->board->fields[x] = new char[game->board->size];
+			for (int y = 0; y < game->board->size; y++) {
+				fread(&(game->board->fields[x][y]), sizeof(char), 1, file);
+			}
+		}
+		game->previous_board = new board_t;
+		fread(&(game->previous_board->size), sizeof(game->previous_board->size), 1, file);
+		if (game->previous_board->size != -1) {
+			game->previous_board->fields = new char* [game->previous_board->size];
+			for (int x = 0; x < game->previous_board->size; x++) {
+				game->previous_board->fields[x] = new char[game->previous_board->size];
+				for (int y = 0; y < game->previous_board->size; y++) {
+					fread(&(game->previous_board->fields[x][y]), sizeof(char), 1, file);
+				}
+			}
+		}
+		else {
+			delete game->previous_board;
+			game->previous_board = NULL;
+		}
+		fclose(file);
+		return game;
+	}
+	return NULL;
+}
+
 int main() {
 	int zn = 0;
 	coordinates_t cursor_board_position = { 0, 0 };
@@ -569,6 +637,17 @@ int main() {
 				break;
 			case 'n':
 				game = start_new_game(game, &info_start_coordinates);
+			case 's':
+				save_game_state(game);
+				break;
+			case 'l':
+				game_t * new_game;
+				new_game = load_game_state();
+				if (new_game != NULL) {
+					free_game_memory(game);
+					game = new_game;
+				}
+				break;
 			default:
 				break;
 		}
