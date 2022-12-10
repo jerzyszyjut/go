@@ -12,12 +12,17 @@
 #define INFO_BEGGINING_Y 1
 #define BORDER_WIDTH 1
 
+#define STARTING_WHITE_SCORE 0.0
+#define STARTING_BLACK_SCORE 6.5
+
+#define WHITE_PLAYER 1
+#define BLACK_PLAYER -1
 
 #define TEXT_COLOR BLUE
 #define BACKGROUND_COLOR DARKGRAY
 #define BORDER_COLOR YELLOW
-#define PLAYER_1_COLOR WHITE
-#define PLAYER_2_COLOR BLACK
+#define WHITE_PLAYER_COLOR WHITE
+#define BLACK_PLAYER_COLOR BLACK
 
 #define ARROW_DOWN 0x48
 #define ARROW_UP 0x50
@@ -27,6 +32,8 @@
 #define ESCAPE 0x1b
 
 #define CURSOR 'X'
+#define STONE 'O'
+#define CUT '+'
 
 typedef struct coordinates {
 	int x;
@@ -150,11 +157,11 @@ game_t* initialize_game(int board_size) {
 	game->draw_board_position->x = 0;
 	game->draw_board_position->y = 0;
 	game->score = new score_t;
-	game->score->white_player = 0;
-	game->score->black_player = 6.5;
+	game->score->white_player = STARTING_WHITE_SCORE;
+	game->score->black_player = STARTING_BLACK_SCORE;
 	game->board = initialize_board(board_size);
 	game->previous_board = NULL;
-	game->current_player = 1;
+	game->current_player = WHITE_PLAYER;
 	return game;
 }
 
@@ -318,17 +325,17 @@ void draw_board_and_cursor(game_t* game, int info_width) {
 					coordinates_t board_coordinates = { ((x - start_screen.x - 1) / BOARD_GAP_SIZE_X), ((y - start_screen.y - 1) / BOARD_GAP_SIZE_Y) };
 					switch (game->board->fields[board_coordinates.x + game->draw_board_position->x][board_coordinates.y + game->draw_board_position->y])
 					{
-					case -1:
-						textcolor(BLACK);
-						putch('O');
+					case BLACK_PLAYER:
+						textcolor(BLACK_PLAYER_COLOR);
+						putch(STONE);
 						break;
-					case 1:
-						textcolor(WHITE);
-						putch('O');
+					case WHITE_PLAYER:
+						textcolor(WHITE_PLAYER_COLOR);
+						putch(STONE);
 						break;
 					default:
 						textcolor(TEXT_COLOR);
-						putch('+');
+						putch(CUT);
 						break;
 					}
 					textcolor(TEXT_COLOR);
@@ -346,11 +353,11 @@ void draw_board_and_cursor(game_t* game, int info_width) {
 	coordinates_t limited_cursor_position = { game->cursor_position->x - game->draw_board_position->x, game->cursor_position->y - game->draw_board_position->y };
 	coordinates_t* displayed_cursor_position = get_cursor_position_from_board_position(limited_cursor_position, {info_width, BOARD_BEGGINING_Y});
 	gotoxy(displayed_cursor_position->x, displayed_cursor_position->y);
-	if (game->current_player == 1) {
-		textcolor(PLAYER_1_COLOR);
+	if (game->current_player == WHITE_PLAYER) {
+		textcolor(WHITE_PLAYER_COLOR);
 	}
-	else if (game->current_player == -1) {
-		textcolor(PLAYER_2_COLOR);
+	else if (game->current_player == BLACK_PLAYER) {
+		textcolor(BLACK_PLAYER_COLOR);
 	}
 	textbackground(BACKGROUND_COLOR);
 	putch(CURSOR);
@@ -583,10 +590,10 @@ void remove_neighbours_if_possible(coordinates_t *cursor_position, board_t *boar
 		}
 	}
 	if (score != NULL) {
-		if (current_player == 1) {
+		if (current_player == WHITE_PLAYER) {
 			score->white_player += (float)score_points;
 		}
-		else if (current_player == -1) {
+		else if (current_player == BLACK_PLAYER) {
 			score->black_player += (float)score_points;
 		}
 	}
