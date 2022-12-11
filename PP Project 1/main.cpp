@@ -16,8 +16,8 @@
 
 #define LEGEND_SIDE LEFT
 
-#define STARTING_WHITE_SCORE 0.0
-#define STARTING_BLACK_SCORE 6.5
+#define STARTING_WHITE_SCORE 6.5
+#define STARTING_BLACK_SCORE 0.0
 
 #define WHITE_PLAYER 1
 #define BLACK_PLAYER -1
@@ -98,24 +98,25 @@ coordinates_t* get_cursor_position_from_board_position(coordinates_t cursor_boar
 }
 
 int get_max_board_size(game_t* game, int info_width) {
-	text_info screen_info;
-	gettextinfo(&screen_info);
+	text_info* screen_info = new text_info;
+	gettextinfo(screen_info);
 
 	coordinates_t current_displayed_size = { (game->board->size * BOARD_GAP_SIZE_X) + 2 , (game->board->size * BOARD_GAP_SIZE_Y) + 2 };
 	coordinates_t displayed_size_limits;
-	if (current_displayed_size.x >= screen_info.screenwidth - info_width) {
-		displayed_size_limits.x = (screen_info.screenwidth - info_width - 2) / BOARD_GAP_SIZE_X;
+	if (current_displayed_size.x >= screen_info->screenwidth - info_width) {
+		displayed_size_limits.x = (screen_info->screenwidth - info_width - 2) / BOARD_GAP_SIZE_X;
 	}
 	else {
 		displayed_size_limits.x = game->board->size;
 	}
 
-	if (current_displayed_size.y >= screen_info.screenheight) {
-		displayed_size_limits.y = (screen_info.screenheight - 2) / BOARD_GAP_SIZE_Y;
+	if (current_displayed_size.y >= screen_info->screenheight) {
+		displayed_size_limits.y = (screen_info->screenheight - 2) / BOARD_GAP_SIZE_Y;
 	}
 	else {
 		displayed_size_limits.y = game->board->size;
 	}
+	delete screen_info;
 
 	if (displayed_size_limits.x > displayed_size_limits.y) {
 		return displayed_size_limits.y;
@@ -126,17 +127,18 @@ int get_max_board_size(game_t* game, int info_width) {
 }
 
 int get_displayed_board_width(game_t* game, int info_width) {
-	text_info screen_info;
-	gettextinfo(&screen_info);
+	text_info *screen_info = new text_info;
+	gettextinfo(screen_info);
 
 	coordinates_t current_displayed_size = { (game->board->size * BOARD_GAP_SIZE_X) + 2 , (game->board->size * BOARD_GAP_SIZE_Y) + 2 };
 	coordinates_t displayed_size_limits;
-	if (current_displayed_size.x >= screen_info.screenwidth - info_width) {
-		displayed_size_limits.x = screen_info.screenwidth - info_width;
+	if (current_displayed_size.x >= screen_info->screenwidth - info_width) {
+		displayed_size_limits.x = screen_info->screenwidth - info_width;
 	}
 	else {
 		displayed_size_limits.x = game->board->size * BOARD_GAP_SIZE_X + 2;
 	}
+	delete screen_info;
 	return displayed_size_limits.x;
 }
 
@@ -181,7 +183,7 @@ game_t* initialize_game(int board_size) {
 	game->score->black_player = STARTING_BLACK_SCORE;
 	game->board = initialize_board(board_size);
 	game->previous_board = NULL;
-	game->current_player = WHITE_PLAYER;
+	game->current_player = BLACK_PLAYER;
 	return game;
 }
 
